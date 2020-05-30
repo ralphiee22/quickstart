@@ -1,4 +1,3 @@
-# Plaid quickstart
 
 This repository accompanies Plaid's [**quickstart guide**][quickstart].
 

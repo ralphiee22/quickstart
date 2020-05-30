@@ -7,6 +7,8 @@ var express = require('express');
 var bodyParser = require('body-parser');
 var moment = require('moment');
 var plaid = require('plaid');
+var request = require('request');
+const axios = require('axios');
 
 var APP_PORT = envvar.number('APP_PORT', 8000);
 var PLAID_CLIENT_ID = envvar.string('PLAID_CLIENT_ID');
@@ -37,7 +39,7 @@ var PLAID_OAUTH_NONCE = envvar.string('PLAID_OAUTH_NONCE', '');
 
 // We store the access_token in memory - in production, store it in a secure
 // persistent data store
-var ACCESS_TOKEN = null;
+var ACCESS_TOKEN = 'access-development-cd297a51-4c22-4e16-b4f1-b1246bdb016c';
 var PUBLIC_TOKEN = null;
 var ITEM_ID = null;
 // The payment_token is only relevant for the UK Payment Initiation product.
@@ -128,6 +130,39 @@ app.get('/transactions', function(request, response, next) {
         error: error
       });
     } else {
+      transactionsResponse.transactions.forEach(item => {
+        axios({
+          method: 'post',
+          url: 'https://api.clickup.com/api/v2/list/21144348/task',
+          data: {
+            'name': item.name,
+            'status': 'money out',
+            'custom_fields': [
+              {
+                'id': '1afe39aa-12a5-4a43-b6a4-adae3ebd2902',
+                'value': item.amount
+              },
+              {
+                'id': '60161ced-446d-4f34-9d09-02f9e3343a51',
+                'value': new Date(item.date).getTime()
+              },
+              {
+                'id': '87d60a0a-9136-4907-96b6-ebb9b296d8c7',
+                'value': item.amount
+              }
+            ]
+          },
+          headers: {
+            'Authorization': 'pk_4416662_G9HMAVWNAWNBCMJ0LJBAV6QUFGLRHA9U',
+            'content-type': 'application/json',
+          }
+        })
+          .then(() => console.log('success'))
+          .catch((err) => {
+            console.log('fail');
+          });
+      });
+
       prettyPrintResponse(transactionsResponse);
       response.json({error: null, transactions: transactionsResponse});
     }
