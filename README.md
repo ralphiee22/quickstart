@@ -1,4 +1,3 @@
-This repository accompanies Plaid's [**quickstart guide**][quickstart].
 
 Here you'll find full example integration apps using our [**client libraries**][libraries]:
 
