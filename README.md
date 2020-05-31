@@ -1,4 +1,4 @@
-sklsk
+sdkdklsk
 Here you'll find full example integration apps using our [**client libraries**][libraries]:
 
 - [Go][go-example]
