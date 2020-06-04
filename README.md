@@ -2,7 +2,7 @@ Here you'll find full example integration apps using our [**client libraries**][
 
 - [Go][go-example]
 - [Node][node-example]
-- [Ruby][ruby-example]
+- [Ruby][ruby-example]sdsad
 - [Python][python-example]
 - [Java][java-example]
 
