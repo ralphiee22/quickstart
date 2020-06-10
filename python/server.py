@@ -28,7 +28,20 @@ PLAID_PRODUCTS = os.getenv('PLAID_PRODUCTS', 'transactions')
 
 # PLAID_COUNTRY_CODES is a comma-separated list of countries for which users
 # will be able to select institutions from.
-PLAID_COUNTRY_CODES = os.getenv('PLAID_COUNTRY_CODES', 'US,CA,GB,FR,ES')
+PLAID_COUNTRY_CODES = os.getenv('PLAID_COUNTRY_CODES', 'US,CA,GB,FR,ES,IE,NL')
+
+# Parameters used for the OAuth redirect Link flow.
+#
+# Set PLAID_OAUTH_REDIRECT_URI to 'http://localhost:5000/oauth-response.html'
+# The OAuth redirect flow requires an endpoint on the developer's website
+# that the bank website should redirect to. You will need to whitelist
+# this redirect URI for your client ID through the Plaid developer dashboard
+# at https://dashboard.plaid.com/team/api.
+PLAID_OAUTH_REDIRECT_URI = os.getenv('PLAID_OAUTH_REDIRECT_URI', '');
+# Set PLAID_OAUTH_NONCE to a unique identifier such as a UUID for each Link
+# session. The nonce will be used to re-open Link upon completion of the OAuth
+# redirect. The nonce must be at least 16 characters long.
+PLAID_OAUTH_NONCE = os.getenv('PLAID_OAUTH_NONCE', '');
 
 client = plaid.Client(client_id = PLAID_CLIENT_ID, secret=PLAID_SECRET,
                       public_key=PLAID_PUBLIC_KEY, environment=PLAID_ENV, api_version='2019-05-29')
@@ -41,9 +54,30 @@ def index():
     plaid_environment=PLAID_ENV,
     plaid_products=PLAID_PRODUCTS,
     plaid_country_codes=PLAID_COUNTRY_CODES,
+    plaid_oauth_redirect_uri=PLAID_OAUTH_REDIRECT_URI,
+    plaid_oauth_nonce=PLAID_OAUTH_NONCE,
   )
 
+# This is an endpoint defined for the OAuth flow to redirect to.
+@app.route('/oauth-response.html')
+def oauth_response():
+  return render_template(
+    'oauth-response.ejs',
+    plaid_public_key=PLAID_PUBLIC_KEY,
+    plaid_environment=PLAID_ENV,
+    plaid_products=PLAID_PRODUCTS,
+    plaid_country_codes=PLAID_COUNTRY_CODES,
+    plaid_oauth_nonce=PLAID_OAUTH_NONCE,
+  )
+
+# We store the access_token in memory - in production, store it in a secure
+# persistent data store.
 access_token = None
+# The payment_token is only relevant for the UK Payment Initiation product.
+# We store the payment_token in memory - in production, store it in a secure
+# persistent data store.
+payment_token = None
+payment_id = None
 
 # Exchange token flow - exchange a Link public_token for
 # an API access_token
@@ -190,6 +224,15 @@ def get_investment_transactions():
   pretty_print_response(investment_transactions_response)
   return jsonify({'error': None, 'investment_transactions': investment_transactions_response})
 
+# This functionality is only relevant for the UK Payment Initiation product.
+# Retrieve Payment for a specified Payment ID
+@app.route('/payment', methods=['GET'])
+def payment():
+  global payment_id
+  payment_get_response = client.PaymentInitiation.get_payment(payment_id)
+  pretty_print_response(payment_get_response)
+  return jsonify({'error': None, 'payment': payment_get_response})
+
 # Retrieve high-level information about an Item
 # https://plaid.com/docs/#retrieve-item
 @app.route('/item', methods=['GET'])
@@ -207,6 +250,44 @@ def set_access_token():
   access_token = request.form['access_token']
   item = client.Item.get(access_token)
   return jsonify({'error': None, 'item_id': item['item']['item_id']})
+
+# This functionality is only relevant for the UK Payment Initiation product.
+# Sets the payment token in memory on the server side. We generate a new
+# payment token so that the developer is not required to supply one.
+# This makes the quickstart easier to use.
+@app.route('/set_payment_token', methods=['POST'])
+def set_payment_token():
+  global payment_token
+  global payment_id
+  try:
+    create_recipient_response = client.PaymentInitiation.create_recipient(
+      'Harry Potter',
+      'GB33BUKB20201555555555',
+      {
+        'street': ['4 Privet Drive'],
+        'city': 'Little Whinging',
+        'postal_code': '11111',
+        'country': 'GB',
+      },
+    )
+    recipient_id = create_recipient_response['recipient_id']
+
+    create_payment_response = client.PaymentInitiation.create_payment(
+      recipient_id,
+      'payment_ref',
+      {
+        'currency': 'GBP',
+        'value': 12.34,
+      },
+    )
+    payment_id = create_payment_response['payment_id']
+
+    create_payment_token_response = client.PaymentInitiation.create_payment_token(payment_id)
+    payment_token = create_payment_token_response['payment_token']
+  except plaid.errors.PlaidError as e:
+    return jsonify({'error': {'display_message': e.display_message, 'error_code': e.code, 'error_type': e.type } })
+
+  return jsonify({'error': None, 'payment_token': payment_token})
 
 def pretty_print_response(response):
   print(json.dumps(response, indent=2, sort_keys=True))

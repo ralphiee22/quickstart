@@ -27,7 +27,9 @@
             Click the button below to open a list of Institutions. After you select one, you’ll be guided through an authentication process. Upon completion, a public_token will be passed back to the server and exchanged for access_token.
           </p>
 
-          <button id="link-btn" class="button button--is-primary">Connect with Plaid</button>
+          <button id="link-btn" class="button button--is-primary" disabled>Connect with Plaid</button>
+          <div class="loading-indicator"></div>
+
         </div>
 
         <div id="app" class="connected-view">
@@ -40,6 +42,12 @@
               <h3 class="item-overview__heading">access_token</h3>
               <p class="item-overview__id" id="access_token">••••••••hsakjsl</p>
             </div>
+            <!-- This functionality is only relevant for the UK Payment Initiation product. -->
+            <div class="payment_initiation item-overview__column" style='display:none;'>
+              <h3 class="item-overview__heading">payment_token</h3>
+              <p class="item-overview__id" id="payment_token">••••••••hsakjsl</p>
+            </div>
+
 
             <div style="clear: both"></div>
           </div>
@@ -121,6 +129,42 @@
               </div>
             </div>
 
+            <!-- Holdings -->
+            <div class="item-data-row">
+              <div class="item-data-row__left">
+                <div class="item-data-row__request-type">post</div>
+              </div>
+              <div class="item-data-row__center">
+                <div class="item-data-row__nicename">Holdings</div>
+                <div class="item-data-row__endpoint">/investments/holdings/get</div>
+                <div class="item-data-row__description">Retrieve investment holdings on file with the bank, brokerage, or investment institution. Analyze over-exposure to market segments.</div>
+              </div>
+              <div class="item-data-row__right">
+                <button id="get-holdings-btn" class="button button--is-small button--is-default button--is-full-width">Send request</button>
+              </div>
+              <div class="item-data-row__response">
+                <table><tbody id="get-holdings-data"></tbody></table>
+              </div>
+            </div>
+
+            <!-- Investment Transactions -->
+            <div class="item-data-row">
+              <div class="item-data-row__left">
+                <div class="item-data-row__request-type">post</div>
+              </div>
+              <div class="item-data-row__center">
+                <div class="item-data-row__nicename">Investment Transactions</div>
+                <div class="item-data-row__endpoint">/investments/transactions/get</div>
+                <div class="item-data-row__description">Retrieve investment transactions to analyze cash flow and trading performance.</div>
+              </div>
+              <div class="item-data-row__right">
+                <button id="get-investment-transactions-btn" class="button button--is-small button--is-default button--is-full-width">Send request</button>
+              </div>
+              <div class="item-data-row__response">
+                <table><tbody id="get-investment-transactions-data"></tbody></table>
+              </div>
+            </div>
+
             <!-- Assets (hidden unless 'assets' is included in the product list) -->
             <div id='assets' class="item-data-row" style='display:none;'>
               <div class="item-data-row__left">
@@ -129,7 +173,7 @@
               <div class="item-data-row__center">
                 <div class="item-data-row__nicename">Assets</div>
                 <div class="item-data-row__endpoint">/asset_report/*</div>
-                <div class="item-data-row__description">Create a point-in-time snapshot of a user's assets.</div>
+                <div class="item-data-row__description">Create a point-in-time snapshot of a users assets.</div>
               </div>
 
               <div class="item-data-row__right">
@@ -142,8 +186,28 @@
                 <table><tbody id="get-assets-data"></tbody></table>
               </div>
             </div>
-          </div>
 
+            <!-- UK Payment Initiation (hidden unless 'payment_initiation' is included in the product list) -->
+            <div class="payment_initiation item-data-row" style='display:none;'>
+              <div class="item-data-row__left">
+                <div class="item-data-row__request-type">post</div>
+              </div>
+              <div class="item-data-row__center">
+                <div class="item-data-row__nicename">Payment Initiation</div>
+                <div class="item-data-row__endpoint">/payment_initiation/payment/get</div>
+                <div class="item-data-row__description">Retrieve payment initiation status for the payment you just initiated.</div>
+              </div>
+
+              <div class="item-data-row__right">
+                <button id="get-payment-btn" class="button button--is-small button--is-default button--is-full-width">Send request</button>
+              </div>
+
+              <div class="item-data-row__response">
+                <table><tbody id="get-payment-data"></tbody></table>
+              </div>
+            </div>
+
+          </div>
           <div class="box">
             <h3 class="box__heading">Item management</h3>
 
@@ -192,32 +256,90 @@
   <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
   <script>
   (function($) {
+    // Handles redirect from the oauth response page for the oauth flow.
+    if (document.referrer != null && document.referrer.includes('http://localhost:4567/oauth-response.html')) {
+      $('#container').fadeOut('fast', function() {
+        $('#item_id').text('<%= item_id %>');
+        $('#access_token').text('<%= access_token %>');
+        $('#intro').hide();
+        $('#app, #steps').fadeIn('slow');
+      });
+    }
+
     var products = '<%= ENV["PLAID_PRODUCTS"] || "transactions" %>'.split(',');
     if (products.includes('assets')) {
       $('#assets').show();
     }
 
-    var handler = Plaid.create({
+    var linkHandlerCommonOptions = {
       apiVersion: 'v2',
       clientName: 'Plaid Quickstart',
       env: '<%= ENV["PLAID_ENV"] %>',
       product: products,
       key: '<%= ENV["PLAID_PUBLIC_KEY"] %>',
-      countryCodes: '<%= ENV["PLAID_COUNTRY_CODES"] || "US,CA,GB,FR,ES" %>'.split(','),
-      // webhook: 'https://your-domain.tld/plaid-webhook',
-      onSuccess: function(public_token) {
-        $.post('/get_access_token', {
-          public_token: public_token
-        }, function(data) {
-          $('#container').fadeOut('fast', function() {
-            $('#item_id').text(data.item_id);
-            $('#access_token').text(data.access_token);
-            $('#intro').hide();
-            $('#app, #steps').fadeIn('slow');
-          });
+      countryCodes: '<%= ENV["PLAID_COUNTRY_CODES"] || "US,CA,GB,FR,ES,IE,NL" %>'.split(','),
+    };
+    var oauthRedirectUri = '<%= ENV["PLAID_OAUTH_REDIRECT_URI"] %>';
+    if (oauthRedirectUri != '') {
+      linkHandlerCommonOptions.oauthRedirectUri = oauthRedirectUri;
+    }
+    var oauthNonce = '<%= ENV["PLAID_OAUTH_NONCE"] %>';
+    if (oauthNonce != '') {
+      linkHandlerCommonOptions.oauthNonce = oauthNonce;
+    }
+    // This functionality is only relevant for the UK Payment Initiation product.
+    if (products.includes('payment_initiation')) {
+      $('.payment_initiation').show();
+      $.post('/set_payment_token', {}, function(data) {
+        var paymentToken = data.payment_token;
+        $('#payment_token').text(paymentToken);
+
+        // In the case of payment_initiation product, we need to wait for
+        // payment token to be generated before the Link handler can be
+        // initialized.
+        handler = Plaid.create({
+          ...linkHandlerCommonOptions,
+          paymentToken: paymentToken,
+          language: 'en',
+          onSuccess: function(public_token) {
+            // This public token exchange step is not relevant for the
+            // payment_initiation product and should be skipped.
+            $.post('/get_access_token', {
+              public_token: public_token
+            }, function(data) {
+              $('#container').fadeOut('fast', function() {
+                $('#item_id').text(data.item_id);
+                $('#access_token').text(data.access_token);
+                $('#intro').hide();
+                $('#app, #steps').fadeIn('slow');
+              });
+            });
+          },
         });
-      },
-    });
+        $('#link-btn').attr('disabled', false);
+        $('.loading-indicator').hide();
+      });
+    } else {
+      var handler = Plaid.create({
+        ...linkHandlerCommonOptions,
+        // webhook: 'https://your-domain.tld/plaid-webhook',
+        onSuccess: function(public_token) {
+          $.post('/get_access_token', {
+            public_token: public_token
+          }, function(data) {
+            $('#container').fadeOut('fast', function() {
+              $('#item_id').text(data.item_id);
+              $('#access_token').text(data.access_token);
+              $('#intro').hide();
+              $('#app, #steps').fadeIn('slow');
+            });
+          });
+        },
+      });
+      $('#link-btn').attr('disabled', false);
+      $('.loading-indicator').hide();
+    }
+
     var accessToken = qs('access_token');
     if (accessToken != null && accessToken != '') {
         $.post('/set_access_token', {
@@ -402,6 +524,70 @@
       });
     });
 
+    $('#get-holdings-btn').on('click', function(e) {
+      $.get('/holdings', function(data) {
+        $('#get-holdings-data').slideUp(function() {
+          if (data.error != null) {
+            displayError(this, data.error);
+            return;
+          }
+          // Organize by Account
+          var holdingsData = data.holdings.holdings.sort(function(a, b) {
+            if (a.account_id > b.account_id) return 1;
+            return -1;
+          });
+          var html = '<tr class="response-row response-row--is-holdings"></tr><td><strong>Account Mask</strong></td><td><strong>Name</strong></td><td><strong>Quantity</strong></td><td><strong>Close Price</strong></td><td><strong>Value</strong></td><tr class="response-row response-row--is-holding">';
+          holdingsData.forEach(function(h, idx) {
+            const account = data.holdings.accounts.filter(a => a.account_id === h.account_id)[0];
+            const security = data.holdings.securities.filter(s => s.security_id === h.security_id)[0];
+            if (account == null) {
+              displayError(this, {
+                code: 500,
+                type: 'Internal',
+                display_message: 'Holding lacks a account',
+              });
+            }
+            if (security == null) {
+              displayError(this, {
+                code: 500,
+                type: 'Internal',
+                display_message: 'Holding lacks a security',
+              });
+            }
+            html += '<tr>';
+            html += '<td>' + account.mask + '</td>';
+            html += '<td>' + security.name + '</td>';
+            html += '<td>' + h.quantity + '</td>';
+            html += '<td>$' + security.close_price + '</td>';
+            html += '<td>$' + h.quantity * security.close_price + '</td>';
+            html += '</tr>';
+          });
+          $(this).html(html).slideDown();
+        });
+      });
+    });
+
+    $('#get-investment-transactions-btn').on('click', function(e) {
+      $.get('/investment_transactions', function(data) {
+        $('#get-investment-transactions-data').slideUp(function() {
+          if (data.error != null) {
+            displayError(this, data.error);
+            return;
+          }
+          investmentTransactionData = data.investment_transactions.investment_transactions;
+          var html = '<tr class="response-row response-row--is-investment-transactions"></tr><td><strong>Name</strong></td><td><strong>Amount</strong></td><td><strong>Date</strong></td><tr class="response-row response-row--is-investment-transaction">';
+          investmentTransactionData.forEach(function(invTxn, idx) {
+            html += '<tr>';
+            html += '<td>' + invTxn.name + '</td>';
+            html += '<td>$' + invTxn.amount + '</td>';
+            html += '<td>' + invTxn.date + '</td>';
+            html += '</tr>';
+          });
+          $(this).html(html).slideDown();
+        });
+      });
+    });
+
     $('#get-assets-btn').on('click', function(e) {
       $.get('/assets', function(data) {
         $('#get-assets-data').slideUp(function() {
@@ -437,6 +623,27 @@
         });
       });
     });
+
+    // This functionality is only relevant for the UK Payment Initiation product.
+    $('#get-payment-btn').on('click', function(e) {
+      $.get('/payment', function(data) {
+        $('#get-payment-data').slideUp(function() {
+          if (data.error != null) {
+            displayError(this, data.error);
+            return;
+          }
+          var paymentData = data.payment;
+          var html = '';
+          html += '<tr><td>Payment ID</td><td>' + paymentData.payment_id + '</td></tr>';
+          html += '<tr><td>Amount</td><td>' + (paymentData.amount.currency + ' ' + paymentData.amount.value) + '</td></tr>';
+          html += '<tr><td>Status</td><td>' + paymentData.status + '</td></tr>';
+          html += '<tr><td>Last Status Update</td><td>' + paymentData.last_status_update + '</td></tr>';
+          html += '<tr><td>Recipient ID</td><td>' + paymentData.recipient_id + '</td></tr>';
+          $(this).html(html).slideDown();
+        });
+      });
+    });
+
   })(jQuery);
 
 function qs(key) {
