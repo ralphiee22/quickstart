@@ -10,13 +10,6 @@ import (
 	"github.com/plaid/plaid-go/plaid"
 )
 
-func init() {
-	if PLAID_PRODUCTS == "" {
-		PLAID_PRODUCTS = "transactions"
-	}
-	if PLAID_COUNTRY_CODES == "" {
-		PLAID_COUNTRY_CODES = "US,CA,GB,FR,ES,IE,NL"
-	}
 }
 
 // Fill with your Plaid API keys - https://dashboard.plaid.com/account/keys
@@ -50,7 +43,9 @@ var clientOptions = plaid.ClientOptions{
 	PLAID_SECRET,
 	PLAID_PUBLIC_KEY,
 	plaid.Sandbox, // Available environments are Sandbox, Development, and Production
-	&http.Client{},
+	&http.Client{ // Optional
+		Transport: &transport{underlyingTransport: http.DefaultTransport},
+	},
 }
 
 var client, err = plaid.NewClient(clientOptions)
