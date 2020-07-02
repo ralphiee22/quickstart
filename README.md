@@ -12,6 +12,5 @@ dsd
 [libraries]: https://plaid.com/docs/libraries
 [node-example]: /node
 [ruby-example]: /ruby
-[python-example]: /python
-[java-example]: /java
-[go-example]: /go
+And som etext
+sd
